@@ -10,12 +10,12 @@
 
 *******************************************************************************/
 
-#include <sys/wait.h>
-#include <sys/types.h>
+#include <process.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 /*
   Function Declarations for builtin shell commands:
@@ -23,6 +23,9 @@
 int lsh_cd(char **args);
 int lsh_help(char **args);
 int lsh_exit(char **args);
+int lsh_date();
+int lsh_time();
+int lsh_pwd();
 
 /*
   List of builtin commands, followed by their corresponding functions.
@@ -30,13 +33,19 @@ int lsh_exit(char **args);
 char *builtin_str[] = {
   "cd",
   "help",
-  "exit"
+  "exit",
+  "date",
+  "time",
+  "pwd"
 };
 
 int (*builtin_func[]) (char **) = {
   &lsh_cd,
   &lsh_help,
-  &lsh_exit
+  &lsh_exit,
+  &lsh_date,
+  &lsh_time,
+  &lsh_pwd,
 };
 
 int lsh_num_builtins() {
@@ -94,6 +103,37 @@ int lsh_exit(char **args)
   return 0;
 }
 
+int lsh_date()
+{
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    printf("%02d/%02d/%04d\n", tm.tm_mday,  tm.tm_mon + 1,tm.tm_year + 1900 );
+}
+
+int lsh_time()
+{
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    printf("%02d:%02d:%02d\n", tm.tm_hour, tm.tm_min, tm.tm_sec);
+}
+
+int lsh_pwd()
+{
+    char* buffer;
+    if ( (buffer = getcwd(NULL, 0)) == NULL)
+    {
+        perror("pwd error");
+        return 2;
+    }
+    else
+    {
+        printf("%s\n", buffer);
+    }
+    free(buffer);
+
+    return 1;
+}
+
 /**
   @brief Launch a program and wait for it to terminate.
   @param args Null terminated list of arguments (including program).
@@ -101,27 +141,40 @@ int lsh_exit(char **args)
  */
 int lsh_launch(char **args)
 {
-  pid_t pid;
-  int status;
+    char **nargs = NULL;
+    int exit_code;
 
-  pid = fork();
-  if (pid == 0) {
-    // Child process
-    if (execvp(args[0], args) == -1) {
-      perror("lsh");
+    // comando di shell: preparo ["cmd.exe","/C", args[0], args[1],..., NULL]
+    int i, cnt = 0;
+    while (args[cnt]) cnt++;
+    // 2 (cmd + /C) + cnt comandi + 1 per NULL
+    nargs = malloc((2 + cnt + 1) * sizeof(char *));
+    if (!nargs)
+    {
+        perror("malloc");
+        return 1;
     }
-    exit(EXIT_FAILURE);
-  } else if (pid < 0) {
-    // Error forking
-    perror("lsh");
-  } else {
-    // Parent process
-    do {
-      waitpid(pid, &status, WUNTRACED);
-    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
-  }
+    nargs[0] = "cmd.exe";
+    nargs[1] = "/C";
+    for (i = 0; i < cnt; i++)
+    {
+        nargs[2 + i] = (char *)args[i];
+    }
+    nargs[2 + cnt] = NULL;
 
-  return 1;
+    exit_code = _spawnvp(_P_WAIT,
+                         "cmd.exe",
+                         (char * const *)nargs);
+
+    free(nargs);
+
+    if (exit_code == -1)
+    {
+        perror("run_and_wait");
+        return 1;
+    }
+
+    return 1;
 }
 
 /**
