@@ -164,7 +164,7 @@ int lsh_launch(char **args)
 
     exit_code = _spawnvp(_P_WAIT,
                          "cmd.exe",
-                         (char * const *)nargs);
+                         (const char * const *)nargs);
 
     free(nargs);
 
