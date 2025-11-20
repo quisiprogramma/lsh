@@ -16,6 +16,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
+#include <dirent.h>
+#include "lsh_utils.h"
+#define INI_IMPLEMENTATION
+#include "ini.h"
+
 
 /*
   Function Declarations for builtin shell commands:
@@ -26,30 +32,36 @@ int lsh_exit(char **args);
 int lsh_date();
 int lsh_time();
 int lsh_pwd();
+int lsh_show(char **args);
 
 /*
   List of builtin commands, followed by their corresponding functions.
  */
-char *builtin_str[] = {
-  "cd",
-  "help",
-  "exit",
-  "date",
-  "time",
-  "pwd"
+char *builtin_str[] =
+{
+    "cd",
+    "help",
+    "exit",
+    "date",
+    "time",
+    "pwd",
+    "show"
 };
 
-int (*builtin_func[]) (char **) = {
-  &lsh_cd,
-  &lsh_help,
-  &lsh_exit,
-  &lsh_date,
-  &lsh_time,
-  &lsh_pwd,
+int (*builtin_func[]) (char **) =
+{
+    &lsh_cd,
+    &lsh_help,
+    &lsh_exit,
+    &lsh_date,
+    &lsh_time,
+    &lsh_pwd,
+    &lsh_show
 };
 
-int lsh_num_builtins() {
-  return sizeof(builtin_str) / sizeof(char *);
+int lsh_num_builtins()
+{
+    return sizeof(builtin_str) / sizeof(char *);
 }
 
 /*
@@ -63,14 +75,39 @@ int lsh_num_builtins() {
  */
 int lsh_cd(char **args)
 {
-  if (args[1] == NULL) {
-    fprintf(stderr, "lsh: expected argument to \"cd\"\n");
-  } else {
-    if (chdir(args[1]) != 0) {
-      perror("lsh");
+    if (args[1] == NULL)
+    {
+        fprintf(stderr, "lsh: expected argument to \"cd\"\n");
     }
-  }
-  return 1;
+    else
+    {
+        if (chdir(args[1]) != 0)
+        {
+            perror("lsh");
+        }
+    }
+    return 1;
+}
+
+int lsh_show(char **args)
+{
+    if (args[1] == NULL)
+    {
+        print_dir('A');
+    }
+    else if (strcmp(args[1], "folders") == 0)
+    {
+        print_dir('D');
+    }
+    else if (strcmp(args[1], "files") == 0)
+    {
+        print_dir('F');
+    }
+    else
+    {
+        fprintf(stderr, "lsh: expected no arguments or argument \"files\" or \"folders\" \n ");
+    }
+    return 1;
 }
 
 /**
@@ -80,17 +117,18 @@ int lsh_cd(char **args)
  */
 int lsh_help(char **args)
 {
-  int i;
-  printf("Stephen Brennan's LSH\n");
-  printf("Type program names and arguments, and hit enter.\n");
-  printf("The following are built in:\n");
+    int i;
+    printf("Stephen Brennan's LSH\n");
+    printf("Type program names and arguments, and hit enter.\n");
+    printf("The following are built in:\n");
 
-  for (i = 0; i < lsh_num_builtins(); i++) {
-    printf("  %s\n", builtin_str[i]);
-  }
+    for (i = 0; i < lsh_num_builtins(); i++)
+    {
+        printf("  %s\n", builtin_str[i]);
+    }
 
-  printf("Use the man command for information on other programs.\n");
-  return 1;
+    printf("Use the man command for information on other programs.\n");
+    return 1;
 }
 
 /**
@@ -100,7 +138,7 @@ int lsh_help(char **args)
  */
 int lsh_exit(char **args)
 {
-  return 0;
+    return 0;
 }
 
 int lsh_date()
@@ -184,20 +222,23 @@ int lsh_launch(char **args)
  */
 int lsh_execute(char **args)
 {
-  int i;
+    int i;
 
-  if (args[0] == NULL) {
-    // An empty command was entered.
-    return 1;
-  }
-
-  for (i = 0; i < lsh_num_builtins(); i++) {
-    if (strcmp(args[0], builtin_str[i]) == 0) {
-      return (*builtin_func[i])(args);
+    if (args[0] == NULL)
+    {
+        // An empty command was entered.
+        return 1;
     }
-  }
 
-  return lsh_launch(args);
+    for (i = 0; i < lsh_num_builtins(); i++)
+    {
+        if (strcmp(args[0], builtin_str[i]) == 0)
+        {
+            return (*builtin_func[i])(args);
+        }
+    }
+
+    return lsh_launch(args);
 }
 
 /**
@@ -207,53 +248,66 @@ int lsh_execute(char **args)
 char *lsh_read_line(void)
 {
 #ifdef LSH_USE_STD_GETLINE
-  char *line = NULL;
-  ssize_t bufsize = 0; // have getline allocate a buffer for us
-  if (getline(&line, &bufsize, stdin) == -1) {
-    if (feof(stdin)) {
-      exit(EXIT_SUCCESS);  // We received an EOF
-    } else  {
-      perror("lsh: getline\n");
-      exit(EXIT_FAILURE);
+    char *line = NULL;
+    ssize_t bufsize = 0; // have getline allocate a buffer for us
+    if (getline(&line, &bufsize, stdin) == -1)
+    {
+        if (feof(stdin))
+        {
+            exit(EXIT_SUCCESS);  // We received an EOF
+        }
+        else
+        {
+            perror("lsh: getline\n");
+            exit(EXIT_FAILURE);
+        }
     }
-  }
-  return line;
+    return line;
 #else
 #define LSH_RL_BUFSIZE 1024
-  int bufsize = LSH_RL_BUFSIZE;
-  int position = 0;
-  char *buffer = malloc(sizeof(char) * bufsize);
-  int c;
+    int bufsize = LSH_RL_BUFSIZE;
+    int position = 0;
+    char *buffer = malloc(sizeof(char) * bufsize);
+    int c;
 
-  if (!buffer) {
-    fprintf(stderr, "lsh: allocation error\n");
-    exit(EXIT_FAILURE);
-  }
-
-  while (1) {
-    // Read a character
-    c = getchar();
-
-    if (c == EOF) {
-      exit(EXIT_SUCCESS);
-    } else if (c == '\n') {
-      buffer[position] = '\0';
-      return buffer;
-    } else {
-      buffer[position] = c;
-    }
-    position++;
-
-    // If we have exceeded the buffer, reallocate.
-    if (position >= bufsize) {
-      bufsize += LSH_RL_BUFSIZE;
-      buffer = realloc(buffer, bufsize);
-      if (!buffer) {
+    if (!buffer)
+    {
         fprintf(stderr, "lsh: allocation error\n");
         exit(EXIT_FAILURE);
-      }
     }
-  }
+
+    while (1)
+    {
+        // Read a character
+        c = getchar();
+
+        if (c == EOF)
+        {
+            exit(EXIT_SUCCESS);
+        }
+        else if (c == '\n')
+        {
+            buffer[position] = '\0';
+            return buffer;
+        }
+        else
+        {
+            buffer[position] = c;
+        }
+        position++;
+
+        // If we have exceeded the buffer, reallocate.
+        if (position >= bufsize)
+        {
+            bufsize += LSH_RL_BUFSIZE;
+            buffer = realloc(buffer, bufsize);
+            if (!buffer)
+            {
+                fprintf(stderr, "lsh: allocation error\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
 #endif
 }
 
@@ -266,56 +320,70 @@ char *lsh_read_line(void)
  */
 char **lsh_split_line(char *line)
 {
-  int bufsize = LSH_TOK_BUFSIZE, position = 0;
-  char **tokens = malloc(bufsize * sizeof(char*));
-  char *token, **tokens_backup;
+    int bufsize = LSH_TOK_BUFSIZE, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char*));
+    char *token, **tokens_backup;
 
-  if (!tokens) {
-    fprintf(stderr, "lsh: allocation error\n");
-    exit(EXIT_FAILURE);
-  }
-
-  token = strtok(line, LSH_TOK_DELIM);
-  while (token != NULL) {
-    tokens[position] = token;
-    position++;
-
-    if (position >= bufsize) {
-      bufsize += LSH_TOK_BUFSIZE;
-      tokens_backup = tokens;
-      tokens = realloc(tokens, bufsize * sizeof(char*));
-      if (!tokens) {
-		free(tokens_backup);
+    if (!tokens)
+    {
         fprintf(stderr, "lsh: allocation error\n");
         exit(EXIT_FAILURE);
-      }
     }
 
-    token = strtok(NULL, LSH_TOK_DELIM);
-  }
-  tokens[position] = NULL;
-  return tokens;
+    token = strtok(line, LSH_TOK_DELIM);
+    while (token != NULL)
+    {
+        tokens[position] = token;
+        position++;
+
+        if (position >= bufsize)
+        {
+            bufsize += LSH_TOK_BUFSIZE;
+            tokens_backup = tokens;
+            tokens = realloc(tokens, bufsize * sizeof(char*));
+            if (!tokens)
+            {
+                free(tokens_backup);
+                fprintf(stderr, "lsh: allocation error\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        token = strtok(NULL, LSH_TOK_DELIM);
+    }
+    tokens[position] = NULL;
+    return tokens;
 }
 
 /**
    @brief Loop getting input and executing it.
  */
-void lsh_loop(void)
+void lsh_loop(char* prompt, bool show_folder)
 {
-  char *line;
-  char **args;
-  int status;
+    char *line;
+    char **args;
+    int status;
+    char* folder;
 
-  do {
-    printf("> ");
-    line = lsh_read_line();
-    args = lsh_split_line(line);
-    status = lsh_execute(args);
+    do
+    {
+        folder=curr_dir();
+        if (show_folder)
+            printf("%s %s ", folder, prompt);
+        else
+            printf("%s", prompt);
+        line = lsh_read_line();
+        args = lsh_split_line(line);
+        status = lsh_execute(args);
 
-    free(line);
-    free(args);
-  } while (status);
+        free(line);
+        free(args);
+    }
+    while (status);
+    free(folder);
 }
+
+
 
 /**
    @brief Main entry point.
@@ -325,13 +393,38 @@ void lsh_loop(void)
  */
 int main(int argc, char **argv)
 {
-  // Load config files, if any.
+    char* prompt;
+    bool show_folder;
 
-  // Run command loop.
-  lsh_loop();
+    // Load config files, if any.
+    char* home_path = get_homedir();
+    char* config_path = build_full_path(home_path, "lsh.config");
 
-  // Perform any shutdown/cleanup.
+    if (file_exists(config_path))
+    {
+        printf("Using config file...\n");
+        ini_t ini = ini_parse(config_path, NULL);
+        prompt = ini_as_str(ini_get(ini_get_table(&ini, INI_ROOT), "prompt"), false);
+        if (prompt==NULL) prompt = "> ";
+        show_folder = ini_as_bool(ini_get(ini_get_table(&ini, INI_ROOT), "show.folder"));
+        if (show_folder==NULL) show_folder=false;
+    }
+    else
+    {
+        printf("Config file lsh.config not found in user folder, using default values...\n");
+        prompt= "> ";
+        show_folder = false;
+    }
 
-  return EXIT_SUCCESS;
+    free(home_path);
+    free(config_path);
+
+    // Run command loop.
+    lsh_loop(prompt, show_folder);
+
+    // Perform any shutdown/cleanup.
+    free(prompt);
+
+    return EXIT_SUCCESS;
 }
 
