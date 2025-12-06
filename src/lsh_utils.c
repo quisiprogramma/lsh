@@ -77,7 +77,7 @@ void print_dir(char type)
 
     while((e=readdir(d)))
     {
-        if  (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".")  )
+        if  (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")  )
             continue;
         test = opendir(e->d_name);
 
